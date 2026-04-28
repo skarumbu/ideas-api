@@ -1,0 +1,112 @@
+import logging
+import os
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from azure.core.exceptions import ResourceNotFoundError
+from azure.data.tables import TableServiceClient
+
+logger = logging.getLogger("ideas-api.ideas")
+
+CONNECTION_STRING = os.environ.get("IDEAS_TABLE_CONNECTION_STRING", "")
+TABLE_NAME = "ideas"
+VALID_STATUSES = {"open", "done", "dismissed"}
+
+
+def _get_table_client():
+    if not CONNECTION_STRING:
+        raise RuntimeError("IDEAS_TABLE_CONNECTION_STRING is not configured")
+    svc = TableServiceClient.from_connection_string(CONNECTION_STRING)
+    svc.create_table_if_not_exists(TABLE_NAME)
+    return svc.get_table_client(TABLE_NAME)
+
+
+def _entity_to_dict(e: dict) -> dict:
+    return {
+        "id": e.get("RowKey", ""),
+        "feature_name": e.get("feature_name", ""),
+        "title": e.get("title", ""),
+        "body": e.get("body", ""),
+        "status": e.get("status", "open"),
+        "created_at": e.get("created_at", ""),
+        "source": e.get("source", "manual"),
+    }
+
+
+def list_ideas(status: str | None = None) -> list[dict]:
+    try:
+        client = _get_table_client()
+        if status:
+            entities = client.query_entities(f"PartitionKey eq 'ideas' and status eq '{status}'")
+        else:
+            entities = client.query_entities("PartitionKey eq 'ideas'")
+        ideas = [_entity_to_dict(e) for e in entities]
+        ideas.sort(key=lambda x: x["created_at"], reverse=True)
+        return ideas
+    except Exception as exc:
+        logger.error(f"list_ideas failed: {exc}")
+        return []
+
+
+def create_idea(data: dict) -> dict:
+    feature_name = data.get("feature_name", "").strip()
+    title = data.get("title", "").strip()
+    if not feature_name or not title:
+        raise ValueError("feature_name and title are required")
+
+    client = _get_table_client()
+
+    # Dedup: reject if an open idea with the same feature_name already exists
+    existing = list(client.query_entities(
+        f"PartitionKey eq 'ideas' and feature_name eq '{feature_name}' and status eq 'open'"
+    ))
+    if existing:
+        raise ValueError("duplicate")
+
+    entity = {
+        "PartitionKey": "ideas",
+        "RowKey": str(uuid4()),
+        "feature_name": feature_name,
+        "title": title,
+        "body": data.get("body", ""),
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": data.get("source", "manual"),
+    }
+    client.create_entity(entity)
+    return _entity_to_dict(entity)
+
+
+def update_idea(idea_id: str, updates: dict) -> dict | None:
+    unknown = set(updates) - {"status"}
+    if unknown:
+        raise ValueError(f"Unknown fields: {', '.join(sorted(unknown))}. Only 'status' can be updated.")
+    if "status" in updates and updates["status"] not in VALID_STATUSES:
+        raise ValueError(f"status must be one of: {', '.join(sorted(VALID_STATUSES))}")
+
+    try:
+        client = _get_table_client()
+        entity = client.get_entity(partition_key="ideas", row_key=idea_id)
+        for k, v in updates.items():
+            entity[k] = v
+        client.update_entity(entity)
+        return _entity_to_dict(entity)
+    except ResourceNotFoundError:
+        return None
+    except ValueError:
+        raise
+    except Exception as exc:
+        logger.error(f"update_idea failed: {exc}")
+        raise
+
+
+def delete_idea(idea_id: str) -> bool:
+    try:
+        client = _get_table_client()
+        client.delete_entity(partition_key="ideas", row_key=idea_id)
+        return True
+    except ResourceNotFoundError:
+        return False
+    except Exception as exc:
+        logger.error(f"delete_idea failed: {exc}")
+        raise
