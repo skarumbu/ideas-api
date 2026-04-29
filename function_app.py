@@ -24,6 +24,7 @@ IDEAS_WRITE_KEY = os.environ.get("IDEAS_WRITE_KEY", "")
 BOT_JOB_SUBSCRIPTION_ID = os.environ.get("BOT_JOB_SUBSCRIPTION_ID", "")
 BOT_JOB_RESOURCE_GROUP = os.environ.get("BOT_JOB_RESOURCE_GROUP", "")
 BOT_JOB_NAME = os.environ.get("BOT_JOB_NAME", "")
+BOT_JOB_IMAGE = os.environ.get("BOT_JOB_IMAGE", "")
 
 
 def _machine_or_user_auth(req: func.HttpRequest) -> None:
@@ -251,6 +252,7 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
             containers=[
                 JobExecutionContainer(
                     name="ideas-bot",
+                    image=BOT_JOB_IMAGE,
                     env=[EnvironmentVar(name="IDEA_ID", value=idea_id)],
                 )
             ]
