@@ -4,6 +4,13 @@ import os
 from datetime import datetime
 
 import azure.functions as func
+from azure.identity import ManagedIdentityCredential
+from azure.mgmt.appcontainers import ContainerAppsAPIClient
+from azure.mgmt.appcontainers.models import (
+    JobExecutionTemplate,
+    JobExecutionContainer,
+    EnvironmentVar,
+)
 
 from auth import require_auth
 from ideas import list_ideas, create_idea, update_idea, delete_idea
@@ -14,6 +21,9 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 logger = logging.getLogger("ideas-api")
 
 IDEAS_WRITE_KEY = os.environ.get("IDEAS_WRITE_KEY", "")
+BOT_JOB_SUBSCRIPTION_ID = os.environ.get("BOT_JOB_SUBSCRIPTION_ID", "")
+BOT_JOB_RESOURCE_GROUP = os.environ.get("BOT_JOB_RESOURCE_GROUP", "")
+BOT_JOB_NAME = os.environ.get("BOT_JOB_NAME", "")
 
 
 def _machine_or_user_auth(req: func.HttpRequest) -> None:
@@ -178,3 +188,86 @@ def delete_idea_route(req: func.HttpRequest) -> func.HttpResponse:
         return _json_response({"error": "Idea not found"}, status_code=404)
 
     return func.HttpResponse(status_code=204, headers={"Access-Control-Allow-Origin": "*"})
+
+
+@app.route(route="ideas/{id}/bot", methods=["PATCH"])
+def patch_idea_bot(req: func.HttpRequest) -> func.HttpResponse:
+    """Machine-key-only: bot writes back bot_status / bot_pr_url / bot_error."""
+    key = req.headers.get("X-Ideas-Key", "")
+    if not IDEAS_WRITE_KEY or key != IDEAS_WRITE_KEY:
+        return _unauthorized("Machine write key required")
+
+    idea_id = req.route_params.get("id", "")
+    if not idea_id:
+        return _json_response({"error": "Idea ID required"}, status_code=400)
+
+    try:
+        body = req.get_json()
+    except Exception:
+        return _json_response({"error": "Invalid JSON body"}, status_code=400)
+
+    try:
+        updated = update_idea(idea_id, body, machine_write=True)
+    except ValueError as e:
+        return _json_response({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error(f"patch_idea_bot failed: {e}")
+        return _json_response({"error": "Failed to update idea"}, status_code=500)
+
+    if updated is None:
+        return _json_response({"error": "Idea not found"}, status_code=404)
+
+    return _json_response(updated)
+
+
+@app.route(route="ideas/{id}/run-bot", methods=["POST"])
+def run_bot(req: func.HttpRequest) -> func.HttpResponse:
+    """Authenticated users trigger the bot job for an idea."""
+    try:
+        require_auth(req)
+    except ValueError:
+        return _unauthorized()
+
+    idea_id = req.route_params.get("id", "")
+    if not idea_id:
+        return _json_response({"error": "Idea ID required"}, status_code=400)
+
+    if not all([BOT_JOB_SUBSCRIPTION_ID, BOT_JOB_RESOURCE_GROUP, BOT_JOB_NAME]):
+        return _json_response({"error": "Bot job not configured"}, status_code=503)
+
+    try:
+        updated = update_idea(idea_id, {"bot_status": "queued"}, machine_write=True)
+    except Exception as e:
+        logger.error(f"run_bot: failed to set queued: {e}")
+        return _json_response({"error": "Failed to queue idea"}, status_code=500)
+
+    if updated is None:
+        return _json_response({"error": "Idea not found"}, status_code=404)
+
+    try:
+        credential = ManagedIdentityCredential()
+        client = ContainerAppsAPIClient(credential, BOT_JOB_SUBSCRIPTION_ID)
+        template = JobExecutionTemplate(
+            containers=[
+                JobExecutionContainer(
+                    name="ideas-bot",
+                    env=[EnvironmentVar(name="IDEA_ID", value=idea_id)],
+                )
+            ]
+        )
+        poller = client.jobs.begin_start(
+            resource_group_name=BOT_JOB_RESOURCE_GROUP,
+            job_name=BOT_JOB_NAME,
+            template=template,
+        )
+        execution = poller.result(timeout=15)
+        logger.info(f"run_bot: triggered execution {execution.name} for idea {idea_id}")
+    except Exception as e:
+        logger.error(f"run_bot: Container App Job trigger failed: {e}")
+        try:
+            update_idea(idea_id, {"bot_status": None, "bot_error": str(e)[:200]}, machine_write=True)
+        except Exception:
+            pass
+        return _json_response({"error": "Failed to trigger bot job"}, status_code=500)
+
+    return _json_response(updated, status_code=202)

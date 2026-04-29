@@ -11,6 +11,8 @@ logger = logging.getLogger("ideas-api.ideas")
 CONNECTION_STRING = os.environ.get("IDEAS_TABLE_CONNECTION_STRING", "")
 TABLE_NAME = "ideas"
 VALID_STATUSES = {"open", "done", "dismissed"}
+BOT_WRITABLE_FIELDS = {"bot_status", "bot_pr_url", "bot_error"}
+VALID_BOT_STATUSES = {"queued", "running", "completed", "failed"}
 
 
 def _get_table_client():
@@ -30,6 +32,9 @@ def _entity_to_dict(e: dict) -> dict:
         "status": e.get("status", "open"),
         "created_at": e.get("created_at", ""),
         "source": e.get("source", "manual"),
+        "bot_status": e.get("bot_status", None),
+        "bot_pr_url": e.get("bot_pr_url", None),
+        "bot_error": e.get("bot_error", None),
     }
 
 
@@ -77,12 +82,18 @@ def create_idea(data: dict) -> dict:
     return _entity_to_dict(entity)
 
 
-def update_idea(idea_id: str, updates: dict) -> dict | None:
-    unknown = set(updates) - {"status"}
+def update_idea(idea_id: str, updates: dict, machine_write: bool = False) -> dict | None:
+    allowed = {"status"}
+    if machine_write:
+        allowed |= BOT_WRITABLE_FIELDS
+
+    unknown = set(updates) - allowed
     if unknown:
-        raise ValueError(f"Unknown fields: {', '.join(sorted(unknown))}. Only 'status' can be updated.")
+        raise ValueError(f"Unknown fields: {', '.join(sorted(unknown))}. Allowed: {', '.join(sorted(allowed))}.")
     if "status" in updates and updates["status"] not in VALID_STATUSES:
         raise ValueError(f"status must be one of: {', '.join(sorted(VALID_STATUSES))}")
+    if "bot_status" in updates and updates["bot_status"] is not None and updates["bot_status"] not in VALID_BOT_STATUSES:
+        raise ValueError(f"bot_status must be one of: {', '.join(sorted(VALID_BOT_STATUSES))}")
 
     try:
         client = _get_table_client()
