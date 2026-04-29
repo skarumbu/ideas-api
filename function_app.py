@@ -252,7 +252,7 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
         # Read the job's existing container config so we preserve all env vars
         # (execution template overrides replace the container entirely, not merge)
         job = client.jobs.get(BOT_JOB_RESOURCE_GROUP, BOT_JOB_NAME)
-        base = job.properties.template.containers[0]
+        base = job.template.containers[0]
         merged_env = [e for e in (base.env or []) if e.name != "IDEA_ID"]
         merged_env.append(EnvironmentVar(name="IDEA_ID", value=idea_id))
 
