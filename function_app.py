@@ -7,6 +7,7 @@ import azure.functions as func
 
 from auth import require_auth
 from ideas import list_ideas, create_idea, update_idea, delete_idea
+from projects import list_projects, create_project
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -44,6 +45,42 @@ def _unauthorized(message: str = "Unauthorized") -> func.HttpResponse:
 @app.route(route="health", methods=["GET"])
 def health(req: func.HttpRequest) -> func.HttpResponse:
     return _json_response({"status": "ok"})
+
+
+@app.route(route="projects", methods=["GET"])
+def get_projects(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        require_auth(req)
+    except ValueError:
+        return _unauthorized()
+
+    projects = list_projects()
+    return _json_response({"projects": projects})
+
+
+@app.route(route="projects", methods=["POST"])
+def post_project(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        require_auth(req)
+    except ValueError:
+        return _unauthorized()
+
+    try:
+        body = req.get_json()
+    except Exception:
+        return _json_response({"error": "Invalid JSON body"}, status_code=400)
+
+    try:
+        project = create_project(body.get("name", ""))
+    except ValueError as e:
+        status = 409 if str(e) == "duplicate" else 400
+        msg = "A project with this name already exists" if str(e) == "duplicate" else str(e)
+        return _json_response({"error": msg}, status_code=status)
+    except Exception as e:
+        logger.error(f"post_project failed: {e}")
+        return _json_response({"error": "Failed to create project"}, status_code=500)
+
+    return _json_response(project, status_code=201)
 
 
 @app.route(route="ideas", methods=["GET"])
