@@ -255,19 +255,19 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
                 )
             ]
         )
-        poller = client.jobs.begin_start(
+        client.jobs.begin_start(
             resource_group_name=BOT_JOB_RESOURCE_GROUP,
             job_name=BOT_JOB_NAME,
             template=template,
         )
-        execution = poller.result(timeout=15)
-        logger.info(f"run_bot: triggered execution {execution.name} for idea {idea_id}")
+        logger.info(f"run_bot: triggered job for idea {idea_id}")
     except Exception as e:
-        logger.error(f"run_bot: Container App Job trigger failed: {e}")
+        error_detail = f"{type(e).__name__}: {e}"
+        logger.error(f"run_bot: Container App Job trigger failed: {error_detail}")
         try:
-            update_idea(idea_id, {"bot_status": None, "bot_error": str(e)[:200]}, machine_write=True)
+            update_idea(idea_id, {"bot_status": None, "bot_error": error_detail[:400]}, machine_write=True)
         except Exception:
             pass
-        return _json_response({"error": "Failed to trigger bot job"}, status_code=500)
+        return _json_response({"error": "Failed to trigger bot job", "detail": error_detail[:400]}, status_code=500)
 
     return _json_response(updated, status_code=202)
