@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from azure.core.exceptions import ResourceNotFoundError
-from azure.data.tables import TableServiceClient
+from azure.data.tables import TableServiceClient, UpdateMode
 
 logger = logging.getLogger("ideas-api.ideas")
 
@@ -99,8 +99,11 @@ def update_idea(idea_id: str, updates: dict, machine_write: bool = False) -> dic
         client = _get_table_client()
         entity = client.get_entity(partition_key="ideas", row_key=idea_id)
         for k, v in updates.items():
-            entity[k] = v
-        client.update_entity(entity)
+            if v is None:
+                entity.pop(k, None)
+            else:
+                entity[k] = v
+        client.update_entity(entity, mode=UpdateMode.REPLACE)
         return _entity_to_dict(entity)
     except ResourceNotFoundError:
         return None
