@@ -3,7 +3,7 @@ name: Deploy Ideas API to Azure Functions
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   deploy:
