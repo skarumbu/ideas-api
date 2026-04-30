@@ -61,13 +61,6 @@ def create_idea(data: dict) -> dict:
 
     client = _get_table_client()
 
-    # Dedup: reject if an open idea with the same feature_name already exists
-    existing = list(client.query_entities(
-        f"PartitionKey eq 'ideas' and feature_name eq '{feature_name}' and status eq 'open'"
-    ))
-    if existing:
-        raise ValueError("duplicate")
-
     entity = {
         "PartitionKey": "ideas",
         "RowKey": str(uuid4()),

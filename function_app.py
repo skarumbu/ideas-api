@@ -128,9 +128,7 @@ def post_idea(req: func.HttpRequest) -> func.HttpResponse:
     try:
         idea = create_idea(body)
     except ValueError as e:
-        status = 409 if str(e) == "duplicate" else 400
-        msg = "An open idea with this feature_name already exists" if str(e) == "duplicate" else str(e)
-        return _json_response({"error": msg}, status_code=status)
+        return _json_response({"error": str(e)}, status_code=400)
     except Exception as e:
         logger.error(f"post_idea failed: {e}")
         return _json_response({"error": "Failed to create idea"}, status_code=500)
