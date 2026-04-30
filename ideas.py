@@ -26,7 +26,8 @@ def _get_table_client():
 def _entity_to_dict(e: dict) -> dict:
     return {
         "id": e.get("RowKey", ""),
-        "feature_name": e.get("feature_name", ""),
+        "project": e.get("project") or e.get("feature_name", ""),
+        "project_id": e.get("project_id", None),
         "title": e.get("title", ""),
         "body": e.get("body", ""),
         "status": e.get("status", "open"),
@@ -54,17 +55,19 @@ def list_ideas(status: str | None = None) -> list[dict]:
 
 
 def create_idea(data: dict) -> dict:
-    feature_name = data.get("feature_name", "").strip()
+    project = data.get("project", "").strip()
+    project_id = data.get("project_id", None)
     title = data.get("title", "").strip()
-    if not feature_name or not title:
-        raise ValueError("feature_name and title are required")
+    if not project or not title:
+        raise ValueError("project and title are required")
 
     client = _get_table_client()
 
     entity = {
         "PartitionKey": "ideas",
         "RowKey": str(uuid4()),
-        "feature_name": feature_name,
+        "project": project,
+        "project_id": project_id,
         "title": title,
         "body": data.get("body", ""),
         "status": "open",
@@ -76,7 +79,7 @@ def create_idea(data: dict) -> dict:
 
 
 def update_idea(idea_id: str, updates: dict, machine_write: bool = False) -> dict | None:
-    allowed = {"status", "feature_name", "title", "body"}
+    allowed = {"status", "project", "project_id", "title", "body"}
     if machine_write:
         allowed |= BOT_WRITABLE_FIELDS
 
