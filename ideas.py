@@ -36,6 +36,7 @@ def _entity_to_dict(e: dict) -> dict:
         "bot_status": e.get("bot_status", None),
         "bot_pr_url": e.get("bot_pr_url", None),
         "bot_error": e.get("bot_error", None),
+        "status_updates": e.get("status_updates", []),
     }
 
 
@@ -73,13 +74,14 @@ def create_idea(data: dict) -> dict:
         "status": "open",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source": data.get("source", "manual"),
+        "status_updates": [],
     }
     client.create_entity(entity)
     return _entity_to_dict(entity)
 
 
 def update_idea(idea_id: str, updates: dict, machine_write: bool = False) -> dict | None:
-    allowed = {"status", "project", "project_id", "title", "body"}
+    allowed = {"status", "project", "project_id", "title", "body", "status_updates"}
     if machine_write:
         allowed |= BOT_WRITABLE_FIELDS
 
@@ -95,7 +97,10 @@ def update_idea(idea_id: str, updates: dict, machine_write: bool = False) -> dic
         client = _get_table_client()
         entity = client.get_entity(partition_key="ideas", row_key=idea_id)
         for k, v in updates.items():
-            if v is None:
+            if k == "status_updates" and isinstance(v, dict):
+                v["timestamp"] = datetime.now(timezone.utc).isoformat()
+                entity.setdefault("status_updates", []).append(v)
+            elif v is None:
                 entity.pop(k, None)
             else:
                 entity[k] = v

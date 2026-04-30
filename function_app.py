@@ -166,6 +166,39 @@ def patch_idea(req: func.HttpRequest) -> func.HttpResponse:
     return _json_response(updated)
 
 
+@app.route(route="ideas/{id}/status-updates", methods=["POST"])
+def post_status_update(req: func.HttpRequest) -> func.HttpResponse:
+    """Add a status update to an idea."""
+    try:
+        require_auth(req)
+    except ValueError:
+        return _unauthorized()
+
+    idea_id = req.route_params.get("id", "")
+    if not idea_id:
+        return _json_response({"error": "Idea ID required"}, status_code=400)
+
+    try:
+        body = req.get_json()
+    except Exception:
+        return _json_response({"error": "Invalid JSON body"}, status_code=400)
+
+    if not body.get("status_update"):
+        return _json_response({"error": "Status update text required"}, status_code=400)
+
+    try:
+        update = {"status_updates": {"text": body.get("status_update")}}
+        updated_idea = update_idea(idea_id, update)
+    except Exception as e:
+        logger.error(f"post_status_update failed: {e}")
+        return _json_response({"error": "Failed to add status update"}, status_code=500)
+
+    if updated_idea is None:
+        return _json_response({"error": "Idea not found"}, status_code=404)
+
+    return _json_response(updated_idea, status_code=201)
+
+
 @app.route(route="ideas/{id}", methods=["DELETE"])
 def delete_idea_route(req: func.HttpRequest) -> func.HttpResponse:
     try:
@@ -243,39 +276,4 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
     if updated is None:
         return _json_response({"error": "Idea not found"}, status_code=404)
 
-    try:
-        credential = ManagedIdentityCredential()
-        client = ContainerAppsAPIClient(credential, BOT_JOB_SUBSCRIPTION_ID)
-
-        # Read the job's existing container config so we preserve all env vars
-        # (execution template overrides replace the container entirely, not merge)
-        job = client.jobs.get(BOT_JOB_RESOURCE_GROUP, BOT_JOB_NAME)
-        base = job.template.containers[0]
-        merged_env = [e for e in (base.env or []) if e.name != "IDEA_ID"]
-        merged_env.append(EnvironmentVar(name="IDEA_ID", value=idea_id))
-
-        template = JobExecutionTemplate(
-            containers=[
-                JobExecutionContainer(
-                    name=base.name,
-                    image=base.image,
-                    env=merged_env,
-                )
-            ]
-        )
-        client.jobs.begin_start(
-            resource_group_name=BOT_JOB_RESOURCE_GROUP,
-            job_name=BOT_JOB_NAME,
-            template=template,
-        )
-        logger.info(f"run_bot: triggered job for idea {idea_id}")
-    except Exception as e:
-        error_detail = f"{type(e).__name__}: {e}"
-        logger.error(f"run_bot: Container App Job trigger failed: {error_detail}")
-        try:
-            update_idea(idea_id, {"bot_status": None, "bot_error": error_detail[:400]}, machine_write=True)
-        except Exception:
-            pass
-        return _json_response({"error": "Failed to trigger bot job", "detail": error_detail[:400]}, status_code=500)
-
-    return _json_response(updated, status_code=202)
+    return _json_response(updated)
