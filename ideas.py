@@ -83,7 +83,7 @@ def create_idea(data: dict) -> dict:
 
 
 def update_idea(idea_id: str, updates: dict, machine_write: bool = False) -> dict | None:
-    allowed = {"status"}
+    allowed = {"status", "feature_name", "title", "body"}
     if machine_write:
         allowed |= BOT_WRITABLE_FIELDS
 
