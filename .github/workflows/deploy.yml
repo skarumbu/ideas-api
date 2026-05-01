@@ -36,3 +36,29 @@ jobs:
       - name: Deploy to Azure Functions
         run: |
           func azure functionapp publish ${{ secrets.IDEAS_API_APP_NAME }} --python
+
+  update-architecture:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout my-website
+        uses: actions/checkout@v4
+        with:
+          repository: skarumbu/my-website
+          token: ${{ secrets.DESIGN_DOC_GH_TOKEN }}
+
+      - name: Update deploy metadata
+        run: |
+          git pull origin main
+          DATE=$(date -u +%Y-%m-%d)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          jq --arg date "$DATE" --arg sha "$SHORT_SHA" \
+            '.["ideas-api"] = {"lastDeploy": $date, "commitSha": $sha}' \
+            src/architecture-metadata.json > /tmp/meta.json
+          mv /tmp/meta.json src/architecture-metadata.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/architecture-metadata.json
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: update ideas-api deploy metadata"
+          git push
