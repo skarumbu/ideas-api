@@ -15,6 +15,7 @@ from azure.mgmt.appcontainers.models import (
 from auth import require_auth
 from ideas import list_ideas, create_idea, update_idea, delete_idea
 from projects import list_projects, create_project
+from updates import list_updates, create_update, delete_update
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -279,3 +280,78 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
         return _json_response({"error": "Failed to trigger bot job", "detail": error_detail[:400]}, status_code=500)
 
     return _json_response(updated, status_code=202)
+
+
+@app.route(route="ideas/{id}/updates", methods=["GET"])
+def get_idea_updates(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        _machine_or_user_auth(req)
+    except ValueError:
+        return _unauthorized()
+
+    idea_id = req.route_params.get("id", "")
+    if not idea_id:
+        return _json_response({"error": "Idea ID required"}, status_code=400)
+
+    updates = list_updates(idea_id)
+    return _json_response({"updates": updates, "count": len(updates)})
+
+
+@app.route(route="ideas/{id}/updates", methods=["POST"])
+def post_idea_update(req: func.HttpRequest) -> func.HttpResponse:
+    key = req.headers.get("X-Ideas-Key", "")
+    is_machine = IDEAS_WRITE_KEY and key == IDEAS_WRITE_KEY
+
+    if not is_machine:
+        try:
+            _, author_email, author_name = require_auth(req)
+        except ValueError:
+            return _unauthorized()
+    else:
+        author_email = "bot"
+        author_name = "bot"
+
+    idea_id = req.route_params.get("id", "")
+    if not idea_id:
+        return _json_response({"error": "Idea ID required"}, status_code=400)
+
+    try:
+        body = req.get_json()
+    except Exception:
+        return _json_response({"error": "Invalid JSON body"}, status_code=400)
+
+    content = (body.get("content") or "").strip()
+    if not content:
+        return _json_response({"error": "content is required"}, status_code=400)
+
+    try:
+        update = create_update(idea_id, content, author_email, author_name)
+    except Exception as e:
+        logger.error(f"post_idea_update failed: {e}")
+        return _json_response({"error": "Failed to create update"}, status_code=500)
+
+    return _json_response(update, status_code=201)
+
+
+@app.route(route="ideas/{id}/updates/{update_id}", methods=["DELETE"])
+def delete_idea_update(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        require_auth(req)
+    except ValueError:
+        return _unauthorized()
+
+    idea_id = req.route_params.get("id", "")
+    update_id = req.route_params.get("update_id", "")
+    if not idea_id or not update_id:
+        return _json_response({"error": "Idea ID and update ID required"}, status_code=400)
+
+    try:
+        found = delete_update(idea_id, update_id)
+    except Exception as e:
+        logger.error(f"delete_idea_update failed: {e}")
+        return _json_response({"error": "Failed to delete update"}, status_code=500)
+
+    if not found:
+        return _json_response({"error": "Update not found"}, status_code=404)
+
+    return func.HttpResponse(status_code=204, headers={"Access-Control-Allow-Origin": "*"})
