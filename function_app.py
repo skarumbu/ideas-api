@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from datetime import datetime
 
@@ -19,7 +18,9 @@ from updates import list_updates, create_update, delete_update
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-logger = logging.getLogger("ideas-api")
+from shared_logging import get_logger, log_request
+
+logger = get_logger("ideas-api")
 
 IDEAS_WRITE_KEY = os.environ.get("IDEAS_WRITE_KEY", "")
 BOT_JOB_SUBSCRIPTION_ID = os.environ.get("BOT_JOB_SUBSCRIPTION_ID", "")
@@ -55,11 +56,13 @@ def _unauthorized(message: str = "Unauthorized") -> func.HttpResponse:
 
 
 @app.route(route="health", methods=["GET"])
+@log_request(logger)
 def health(req: func.HttpRequest) -> func.HttpResponse:
     return _json_response({"status": "ok"})
 
 
 @app.route(route="projects", methods=["GET"])
+@log_request(logger)
 def get_projects(req: func.HttpRequest) -> func.HttpResponse:
     try:
         require_auth(req)
@@ -71,6 +74,7 @@ def get_projects(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="projects", methods=["POST"])
+@log_request(logger)
 def post_project(req: func.HttpRequest) -> func.HttpResponse:
     try:
         require_auth(req)
@@ -96,6 +100,7 @@ def post_project(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas", methods=["GET"])
+@log_request(logger)
 def get_ideas(req: func.HttpRequest) -> func.HttpResponse:
     try:
         _machine_or_user_auth(req)
@@ -115,6 +120,7 @@ def get_ideas(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas", methods=["POST"])
+@log_request(logger)
 def post_idea(req: func.HttpRequest) -> func.HttpResponse:
     try:
         _machine_or_user_auth(req)
@@ -138,6 +144,7 @@ def post_idea(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas/{id}", methods=["PATCH"])
+@log_request(logger)
 def patch_idea(req: func.HttpRequest) -> func.HttpResponse:
     try:
         require_auth(req)
@@ -168,6 +175,7 @@ def patch_idea(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas/{id}", methods=["DELETE"])
+@log_request(logger)
 def delete_idea_route(req: func.HttpRequest) -> func.HttpResponse:
     try:
         require_auth(req)
@@ -191,6 +199,7 @@ def delete_idea_route(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas/{id}/bot", methods=["PATCH"])
+@log_request(logger)
 def patch_idea_bot(req: func.HttpRequest) -> func.HttpResponse:
     """Machine-key-only: bot writes back bot_status / bot_pr_url / bot_error."""
     key = req.headers.get("X-Ideas-Key", "")
@@ -221,6 +230,7 @@ def patch_idea_bot(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas/{id}/run-bot", methods=["POST"])
+@log_request(logger)
 def run_bot(req: func.HttpRequest) -> func.HttpResponse:
     """Authenticated users trigger the bot job for an idea."""
     try:
@@ -283,6 +293,7 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas/{id}/updates", methods=["GET"])
+@log_request(logger)
 def get_idea_updates(req: func.HttpRequest) -> func.HttpResponse:
     try:
         _machine_or_user_auth(req)
@@ -298,6 +309,7 @@ def get_idea_updates(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas/{id}/updates", methods=["POST"])
+@log_request(logger)
 def post_idea_update(req: func.HttpRequest) -> func.HttpResponse:
     key = req.headers.get("X-Ideas-Key", "")
     is_machine = IDEAS_WRITE_KEY and key == IDEAS_WRITE_KEY
@@ -334,6 +346,7 @@ def post_idea_update(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="ideas/{id}/updates/{update_id}", methods=["DELETE"])
+@log_request(logger)
 def delete_idea_update(req: func.HttpRequest) -> func.HttpResponse:
     try:
         require_auth(req)

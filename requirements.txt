@@ -2,3 +2,4 @@ azure-functions
 azure-data-tables>=12.4.0
 azure-mgmt-appcontainers>=3.0.0
 azure-identity>=1.15.0
+git+https://github.com/skarumbu/shared-logging.git@master#subdirectory=python
