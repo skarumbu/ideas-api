@@ -242,7 +242,10 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
     if not idea_id:
         return _json_response({"error": "Idea ID required"}, status_code=400)
 
-    body = req.get_json(silent=True) or {}
+    try:
+        body = req.get_json() or {}
+    except Exception:
+        body = {}
     model_override = body.get("model")
     ALLOWED_MODELS = {"gpt-4o", "o3-mini", "gpt-4.5"}
     if model_override and model_override not in ALLOWED_MODELS:
