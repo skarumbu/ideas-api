@@ -1,8 +1,9 @@
+import json
 import logging
 import os
 from uuid import uuid4
 
-from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
+from azure.core.exceptions import ResourceNotFoundError
 from azure.data.tables import TableServiceClient
 
 logger = logging.getLogger("ideas-api.projects")
@@ -20,9 +21,15 @@ def _get_table_client():
 
 
 def _entity_to_dict(e: dict) -> dict:
+    repos_raw = e.get("repos", "[]")
+    try:
+        repos = json.loads(repos_raw) if repos_raw else []
+    except Exception:
+        repos = []
     return {
         "id": e.get("RowKey", ""),
         "name": e.get("name", ""),
+        "repos": repos,
     }
 
 
@@ -38,7 +45,7 @@ def list_projects() -> list[dict]:
         return []
 
 
-def create_project(name: str) -> dict:
+def create_project(name: str, repos: list[str] | None = None) -> dict:
     name = name.strip()
     if not name:
         raise ValueError("name is required")
@@ -57,6 +64,18 @@ def create_project(name: str) -> dict:
         "PartitionKey": "projects",
         "RowKey": str(uuid4()),
         "name": name,
+        "repos": json.dumps(repos or []),
     }
     client.create_entity(entity)
+    return _entity_to_dict(entity)
+
+
+def update_project(project_id: str, repos: list[str]) -> dict | None:
+    client = _get_table_client()
+    try:
+        entity = client.get_entity("projects", project_id)
+    except ResourceNotFoundError:
+        return None
+    entity["repos"] = json.dumps(repos)
+    client.update_entity(entity)
     return _entity_to_dict(entity)

@@ -13,7 +13,7 @@ from azure.mgmt.appcontainers.models import (
 
 from auth import require_auth
 from ideas import list_ideas, create_idea, update_idea, delete_idea
-from projects import list_projects, create_project
+from projects import list_projects, create_project, update_project
 from updates import list_updates, create_update, delete_update
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
@@ -65,7 +65,7 @@ def health(req: func.HttpRequest) -> func.HttpResponse:
 @log_request(logger)
 def get_projects(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        require_auth(req)
+        _machine_or_user_auth(req)
     except ValueError:
         return _unauthorized()
 
@@ -86,8 +86,13 @@ def post_project(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         return _json_response({"error": "Invalid JSON body"}, status_code=400)
 
+    repos = body.get("repos") or []
+    if not isinstance(repos, list):
+        return _json_response({"error": "repos must be a list"}, status_code=400)
+    repos = [r for r in repos if isinstance(r, str) and r.strip()]
+
     try:
-        project = create_project(body.get("name", ""))
+        project = create_project(body.get("name", ""), repos=repos)
     except ValueError as e:
         status = 409 if str(e) == "duplicate" else 400
         msg = "A project with this name already exists" if str(e) == "duplicate" else str(e)
@@ -97,6 +102,40 @@ def post_project(req: func.HttpRequest) -> func.HttpResponse:
         return _json_response({"error": "Failed to create project"}, status_code=500)
 
     return _json_response(project, status_code=201)
+
+
+@app.route(route="projects/{id}", methods=["PATCH"])
+@log_request(logger)
+def patch_project(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        require_auth(req)
+    except ValueError:
+        return _unauthorized()
+
+    project_id = req.route_params.get("id", "")
+    if not project_id:
+        return _json_response({"error": "Project ID required"}, status_code=400)
+
+    try:
+        body = req.get_json()
+    except Exception:
+        return _json_response({"error": "Invalid JSON body"}, status_code=400)
+
+    repos = body.get("repos") or []
+    if not isinstance(repos, list):
+        return _json_response({"error": "repos must be a list"}, status_code=400)
+    repos = [r for r in repos if isinstance(r, str) and r.strip()]
+
+    try:
+        updated = update_project(project_id, repos)
+    except Exception as e:
+        logger.error(f"patch_project failed: {e}")
+        return _json_response({"error": "Failed to update project"}, status_code=500)
+
+    if updated is None:
+        return _json_response({"error": "Project not found"}, status_code=404)
+
+    return _json_response(updated)
 
 
 @app.route(route="ideas", methods=["GET"])
