@@ -12,7 +12,7 @@ CONNECTION_STRING = os.environ.get("IDEAS_TABLE_CONNECTION_STRING", "")
 TABLE_NAME = "ideas"
 VALID_STATUSES = {"open", "done", "dismissed"}
 BOT_WRITABLE_FIELDS = {"bot_status", "bot_pr_url", "bot_error"}
-VALID_BOT_STATUSES = {"queued", "running", "completed", "failed"}
+VALID_BOT_STATUSES = {"queued", "running", "completed", "failed", "needs_info"}
 
 
 def _get_table_client():

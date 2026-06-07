@@ -242,6 +242,12 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
     if not idea_id:
         return _json_response({"error": "Idea ID required"}, status_code=400)
 
+    body = req.get_json(silent=True) or {}
+    model_override = body.get("model")
+    ALLOWED_MODELS = {"gpt-4o", "o3-mini", "gpt-4.5"}
+    if model_override and model_override not in ALLOWED_MODELS:
+        return _json_response({"error": f"model must be one of: {', '.join(sorted(ALLOWED_MODELS))}"}, status_code=400)
+
     if not all([BOT_JOB_SUBSCRIPTION_ID, BOT_JOB_RESOURCE_GROUP, BOT_JOB_NAME]):
         return _json_response({"error": "Bot job not configured"}, status_code=503)
 
@@ -262,8 +268,11 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
         # (execution template overrides replace the container entirely, not merge)
         job = client.jobs.get(BOT_JOB_RESOURCE_GROUP, BOT_JOB_NAME)
         base = job.template.containers[0]
-        merged_env = [e for e in (base.env or []) if e.name != "IDEA_ID"]
+        exclude = {"IDEA_ID", "AZURE_OPENAI_DEPLOYMENT"} if model_override else {"IDEA_ID"}
+        merged_env = [e for e in (base.env or []) if e.name not in exclude]
         merged_env.append(EnvironmentVar(name="IDEA_ID", value=idea_id))
+        if model_override:
+            merged_env.append(EnvironmentVar(name="AZURE_OPENAI_DEPLOYMENT", value=model_override))
 
         template = JobExecutionTemplate(
             containers=[
