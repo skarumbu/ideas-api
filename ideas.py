@@ -11,8 +11,8 @@ logger = logging.getLogger("ideas-api.ideas")
 CONNECTION_STRING = os.environ.get("IDEAS_TABLE_CONNECTION_STRING", "")
 TABLE_NAME = "ideas"
 VALID_STATUSES = {"open", "done", "dismissed"}
-BOT_WRITABLE_FIELDS = {"bot_status", "bot_pr_url", "bot_error"}
-VALID_BOT_STATUSES = {"queued", "running", "completed", "failed", "needs_info"}
+BOT_WRITABLE_FIELDS = {"bot_status", "bot_pr_url", "bot_error", "bot_blocked_by"}
+VALID_BOT_STATUSES = {"queued", "running", "completed", "failed", "needs_info", "blocked"}
 
 
 def _get_table_client():
@@ -36,6 +36,7 @@ def _entity_to_dict(e: dict) -> dict:
         "bot_status": e.get("bot_status", None),
         "bot_pr_url": e.get("bot_pr_url", None),
         "bot_error": e.get("bot_error", None),
+        "bot_blocked_by": e.get("bot_blocked_by", None),
     }
 
 
