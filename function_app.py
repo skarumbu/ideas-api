@@ -86,13 +86,10 @@ def post_project(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         return _json_response({"error": "Invalid JSON body"}, status_code=400)
 
-    repos = body.get("repos") or []
-    if not isinstance(repos, list):
-        return _json_response({"error": "repos must be a list"}, status_code=400)
-    repos = [r for r in repos if isinstance(r, str) and r.strip()]
+    repo = (body.get("repo") or "").strip()
 
     try:
-        project = create_project(body.get("name", ""), repos=repos)
+        project = create_project(body.get("name", ""), repo=repo)
     except ValueError as e:
         status = 409 if str(e) == "duplicate" else 400
         msg = "A project with this name already exists" if str(e) == "duplicate" else str(e)
@@ -121,13 +118,10 @@ def patch_project(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         return _json_response({"error": "Invalid JSON body"}, status_code=400)
 
-    repos = body.get("repos") or []
-    if not isinstance(repos, list):
-        return _json_response({"error": "repos must be a list"}, status_code=400)
-    repos = [r for r in repos if isinstance(r, str) and r.strip()]
+    repo = (body.get("repo") or "").strip()
 
     try:
-        updated = update_project(project_id, repos)
+        updated = update_project(project_id, repo)
     except Exception as e:
         logger.error(f"patch_project failed: {e}")
         return _json_response({"error": "Failed to update project"}, status_code=500)

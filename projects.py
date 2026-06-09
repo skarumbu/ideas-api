@@ -21,15 +21,20 @@ def _get_table_client():
 
 
 def _entity_to_dict(e: dict) -> dict:
-    repos_raw = e.get("repos", "[]")
-    try:
-        repos = json.loads(repos_raw) if repos_raw else []
-    except Exception:
-        repos = []
+    # New schema: single `repo` string.
+    # Backward compat: if old `repos` JSON list exists, take the first entry.
+    repo = e.get("repo", "")
+    if not repo:
+        repos_raw = e.get("repos", "[]")
+        try:
+            old_list = json.loads(repos_raw) if repos_raw else []
+            repo = old_list[0] if old_list else ""
+        except Exception:
+            repo = ""
     return {
         "id": e.get("RowKey", ""),
         "name": e.get("name", ""),
-        "repos": repos,
+        "repo": repo,
     }
 
 
@@ -45,7 +50,7 @@ def list_projects() -> list[dict]:
         return []
 
 
-def create_project(name: str, repos: list[str] | None = None) -> dict:
+def create_project(name: str, repo: str = "") -> dict:
     name = name.strip()
     if not name:
         raise ValueError("name is required")
@@ -64,18 +69,18 @@ def create_project(name: str, repos: list[str] | None = None) -> dict:
         "PartitionKey": "projects",
         "RowKey": str(uuid4()),
         "name": name,
-        "repos": json.dumps(repos or []),
+        "repo": repo.strip(),
     }
     client.create_entity(entity)
     return _entity_to_dict(entity)
 
 
-def update_project(project_id: str, repos: list[str]) -> dict | None:
+def update_project(project_id: str, repo: str) -> dict | None:
     client = _get_table_client()
     try:
         entity = client.get_entity("projects", project_id)
     except ResourceNotFoundError:
         return None
-    entity["repos"] = json.dumps(repos)
+    entity["repo"] = repo.strip()
     client.update_entity(entity)
     return _entity_to_dict(entity)
