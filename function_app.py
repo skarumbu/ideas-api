@@ -280,7 +280,7 @@ def run_bot(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         body = {}
     model_override = body.get("model")
-    ALLOWED_MODELS = {"gpt-4o", "gpt-4.1-mini", "gpt-4.1"}
+    ALLOWED_MODELS = {"gpt-4o", "gpt-5-mini", "gpt-4.1"}
     if model_override and model_override not in ALLOWED_MODELS:
         return _json_response({"error": f"model must be one of: {', '.join(sorted(ALLOWED_MODELS))}"}, status_code=400)
 
