@@ -50,6 +50,14 @@ def list_projects() -> list[dict]:
         return []
 
 
+def get_project_by_name(name: str) -> dict | None:
+    client = _get_table_client()
+    existing = list(client.query_entities(
+        f"PartitionKey eq 'projects' and name eq '{name}'"
+    ))
+    return _entity_to_dict(existing[0]) if existing else None
+
+
 def create_project(name: str, repo: str = "") -> dict:
     name = name.strip()
     if not name:
