@@ -6,6 +6,8 @@ from uuid import uuid4
 from azure.core.exceptions import ResourceNotFoundError
 from azure.data.tables import TableServiceClient, UpdateMode
 
+from projects import create_project, get_project_by_name
+
 logger = logging.getLogger("ideas-api.ideas")
 
 CONNECTION_STRING = os.environ.get("IDEAS_TABLE_CONNECTION_STRING", "")
@@ -61,6 +63,22 @@ def create_idea(data: dict) -> dict:
     title = data.get("title", "").strip()
     if not project or not title:
         raise ValueError("project and title are required")
+
+    # Every idea must resolve to a real, linkable project, regardless of how it was
+    # created (UI composer, MCP server, bot subtasks). If the caller didn't already
+    # resolve project_id, look one up by name or create it, so the project page
+    # always exists.
+    if not project_id:
+        existing = get_project_by_name(project)
+        if existing:
+            project_id = existing["id"]
+        else:
+            try:
+                project_id = create_project(project)["id"]
+            except ValueError:
+                # Lost a race with a concurrent create of the same new project name.
+                existing = get_project_by_name(project)
+                project_id = existing["id"] if existing else None
 
     client = _get_table_client()
 
