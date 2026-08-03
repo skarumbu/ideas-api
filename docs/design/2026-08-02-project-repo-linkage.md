@@ -1,34 +1,40 @@
-# Project/repo linkage for ideas
+# Standardize project ↔ repo linkage
 
 **Status:** Proposed
 **Supersedes:** #9 ("fix: auto-resolve project_id on idea creation")
 
-## Problem
+## Goal
 
-`create_idea()` trusts the caller for `project`/`project_id`, with no lookup or
-validation. The frontend composer resolves/creates the project correctly
-before submitting, but other callers (the local MCP server, and by extension
-anything bot-created) can pass just a project name — `project_id` is
-optional. This produces ideas with a project name but no `project_id`, which
-means no linkable project page (`Ideas.tsx` only renders the project tag as a
-link when `project_id` is set).
+Every project maps 1:1 to a repo, and every project has its own page on the
+site. This is already half-built — `ProjectPage.tsx` (`/ideas/projects/{id}`)
+links out to `project.repo` on GitHub and to its architecture page, and
+`create_project`/`update_project` already store `repo`. What's missing is
+enforcement: `repo` is optional on a project, and idea creation doesn't
+reliably set `project_id`, so the project ↔ repo ↔ page chain isn't
+guaranteed to hold for every project or every idea.
 
-Every idea should be required to link to a real project, and every project
-should be addressable by its repo — not by a free-text name that can drift
-or duplicate.
+This design standardizes that existing setup at the schema/code level rather
+than adding new UI or new concepts:
+
+- Every **project** has a `repo`, and `repo` is what identifies it.
+- Every **idea** has a `project_id`, set at creation time, no exceptions.
 
 ## Design
 
-### 1. Project identity is keyed by repo
+### 1. `repo` is required and is the project's identity
 
-`repo` becomes the unique lookup key for a project. `name` remains a
-separate display label (unchanged in the UI), but is no longer used to
-resolve or dedupe projects during idea creation.
+`create_project` currently accepts `repo` as optional and dedupes on `name`.
+Change it to:
+
+- Require `repo` (non-empty) to create a project.
+- Dedupe on `repo`, not `name`. `name` stays as a separate, editable display
+  label — it just stops being the identity key.
 
 Add `get_project_by_repo(repo: str) -> dict | None` to `projects.py`,
-parallel to the existing `get_project_by_name()`.
+parallel to the existing `get_project_by_name()`, and use it for the dedupe
+check in `create_project`.
 
-### 2. `create_idea` resolves and requires a project — no silent creation
+### 2. `create_idea` requires a resolvable project — no silent creation
 
 `create_idea(data)` accepts either `repo` or `project` (name) to identify
 the target project:
@@ -41,8 +47,8 @@ If no matching project is found, **reject the idea** with a 400:
 > No project found for repo '<repo>'. Register it first via Manage Projects.
 
 This replaces PR #9's behavior of auto-creating a new project on a miss.
-Projects are now a deliberate, pre-registered set — an idea can only target
-one that already exists.
+Projects are a deliberate, pre-registered set (each one gets a repo and a
+page) — an idea can only target one that already exists.
 
 If resolution succeeds, `project_id` is always set server-side, regardless
 of what the caller passed. This closes the original gap: callers that only
@@ -54,14 +60,18 @@ practice — left out of scope here, same as the original PR.
 
 ### 3. Backfill is a one-time script, not an API endpoint
 
-A standalone script scans the `ideas` table for entries with no
-`project_id`, resolves each by matching its `project` string against a
-project's `name` or `repo`, and PATCHes `project_id` in. Ideas with no
-matching project are logged for manual triage rather than guessed at or
-auto-assigned — consistent with "no silent project creation" above.
+Making `repo` required and keying on it only holds going forward unless
+existing data is brought up to the same standard. One script, run once by
+hand, does both:
 
-Run once by hand against the table; not wired into the deploy pipeline or
-exposed as a route.
+- **Projects missing a `repo`:** logged for manual assignment (repo is
+  project-specific info a script shouldn't guess).
+- **Ideas missing a `project_id`:** resolved by matching the idea's `project`
+  string against a project's `name` or `repo` and PATCHed in. Ideas with no
+  matching project are logged for manual triage rather than guessed at or
+  auto-assigned.
+
+Not wired into the deploy pipeline or exposed as a route.
 
 ### 4. Callers
 
@@ -76,4 +86,4 @@ exposed as a route.
 
 - Retroactively fixing `update_idea`'s equivalent trust gap.
 - Any UI changes — Manage Projects already supports setting `repo` per
-  project.
+  project; `ProjectPage.tsx` already builds the individual page from it.
