@@ -11,6 +11,14 @@ Not wired into the deploy pipeline or exposed as a route — run once by hand:
     IDEAS_TABLE_CONNECTION_STRING=... python scripts/backfill_project_ids.py [--dry-run]
 """
 import argparse
+import os
+import sys
+
+# ideas.py/projects.py live at the repo root, one level up from this script —
+# not on sys.path when running `python scripts/backfill_project_ids.py`
+# directly (Python only adds the script's own directory, scripts/, not cwd
+# or the repo root).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ideas import list_ideas, update_idea
 from projects import create_project, get_project_by_name
