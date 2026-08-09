@@ -6,6 +6,8 @@ from uuid import uuid4
 from azure.core.exceptions import ResourceNotFoundError
 from azure.data.tables import TableServiceClient, UpdateMode
 
+from projects import get_project_by_name
+
 logger = logging.getLogger("ideas-api.ideas")
 
 CONNECTION_STRING = os.environ.get("IDEAS_TABLE_CONNECTION_STRING", "")
@@ -61,6 +63,17 @@ def create_idea(data: dict) -> dict:
     title = data.get("title", "").strip()
     if not project or not title:
         raise ValueError("project and title are required")
+
+    # Every idea must resolve to a real, linkable project, regardless of how it was
+    # created (UI composer, MCP server, bot subtasks) — otherwise the project tag
+    # has nothing to link to. project_id is trusted if the caller already resolved
+    # it (the frontend composer does); otherwise resolve by name here, and reject
+    # rather than silently creating an unregistered project.
+    if not project_id:
+        existing = get_project_by_name(project)
+        if not existing:
+            raise ValueError(f"No project found named '{project}'. Register it first via Manage Projects.")
+        project_id = existing["id"]
 
     client = _get_table_client()
 
