@@ -17,8 +17,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install Azure Functions Core Tools
+        # Pinned, not floating @4: cdn.functions.azure.com is currently 404ing on the
+        # latest (4.13.2) release's CDN asset — a live, unresolved upstream outage
+        # (see microsoft/aspire#19166), hitting unrelated repos across GitHub, not
+        # anything specific to this one. 4.12.1 is confirmed working elsewhere as of
+        # this pin. Safe to float back to @4 once Microsoft resolves the outage.
         run: |
-          npm install -g azure-functions-core-tools@4 --unsafe-perm true
+          npm install -g azure-functions-core-tools@4.12.1 --unsafe-perm true
 
       - name: Log in to Azure
         uses: azure/login@v2
