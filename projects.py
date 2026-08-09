@@ -38,6 +38,14 @@ def _entity_to_dict(e: dict) -> dict:
     }
 
 
+def get_project_by_name(name: str) -> dict | None:
+    client = _get_table_client()
+    existing = list(client.query_entities(
+        f"PartitionKey eq 'projects' and name eq '{name}'"
+    ))
+    return _entity_to_dict(existing[0]) if existing else None
+
+
 def list_projects() -> list[dict]:
     try:
         client = _get_table_client()
@@ -57,14 +65,10 @@ def create_project(name: str, repo: str = "") -> dict:
     if len(name) > 60:
         raise ValueError("name must be 60 characters or fewer")
 
-    client = _get_table_client()
-
-    existing = list(client.query_entities(
-        f"PartitionKey eq 'projects' and name eq '{name}'"
-    ))
-    if existing:
+    if get_project_by_name(name):
         raise ValueError("duplicate")
 
+    client = _get_table_client()
     entity = {
         "PartitionKey": "projects",
         "RowKey": str(uuid4()),
