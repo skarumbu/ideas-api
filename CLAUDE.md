@@ -45,7 +45,7 @@ Helper in `function_app.py`:
 |---|---|---|
 | `GET /api/health` | None | Liveness |
 | `GET /api/projects` | EasyAuth | List all projects |
-| `POST /api/projects` | EasyAuth | Create a project |
+| `POST /api/projects` | EasyAuth or key | Create a project |
 | `GET /api/ideas` | EasyAuth or key | List ideas (optional `?status=open\|done\|dismissed`) |
 | `POST /api/ideas` | EasyAuth or key | Create idea |
 | `PATCH /api/ideas/{id}` | EasyAuth | Update idea fields (`status`, `project`, `title`, `body`) |
