@@ -77,7 +77,7 @@ def get_projects(req: func.HttpRequest) -> func.HttpResponse:
 @log_request(logger)
 def post_project(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        require_auth(req)
+        _machine_or_user_auth(req)
     except ValueError:
         return _unauthorized()
 
